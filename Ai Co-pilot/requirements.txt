@@ -1,0 +1,16 @@
+# --- AI Co-Pilot for HR / IT Helpdesk (Agentic RAG) ---
+# Web UI
+streamlit>=1.36
+
+# LLM (Google Gemini via GCP API key)
+google-generativeai>=0.8.0
+
+# Local embeddings + reranking (fully offline)
+sentence-transformers>=3.0.0
+
+# Vector store (documents + semantic memory)
+chromadb>=0.5.5
+
+# Utilities
+python-dotenv>=1.0.1
+pandas>=2.0.0

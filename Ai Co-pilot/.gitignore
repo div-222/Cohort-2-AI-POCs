@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local state (vector index, memory, tool logs, cost ledger)
+.chroma/
+storage/
+*.log
+
+# Model caches
+.cache/
