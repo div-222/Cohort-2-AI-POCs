@@ -1,0 +1,20 @@
+# Streamlit configuration for the AI Co-Pilot POC.
+
+[server]
+# Disable the source-file watcher. Without this, Streamlit walks every imported
+# module's __path__ to decide what to hot-reload — and `transformers` (pulled in
+# by sentence-transformers) lazily imports ~200 image-processing modules that
+# each try to `import torchvision`, flooding the console with harmless
+# ModuleNotFoundError tracebacks. We restart manually after code changes, so the
+# watcher isn't needed. Set to "poll" instead if you want auto-reload back.
+fileWatcherType = "none"
+
+# Don't auto-open a browser tab on every launch.
+headless = true
+
+[logger]
+# Keep the console quiet; raise to "info"/"debug" when troubleshooting.
+level = "warning"
+
+[browser]
+gatherUsageStats = false
