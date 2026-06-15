@@ -58,7 +58,7 @@ def sidebar():
             st.warning("Index is empty. Build it to enable retrieval.")
         else:
             st.metric("Indexed chunks", n)
-        if st.button("🔁 (Re)build index", use_container_width=True):
+        if st.button("🔁 (Re)build index", width="stretch"):
             with st.spinner("Chunking + embedding the policy corpus…"):
                 report = build_index(verbose=False)
             st.success(f"Indexed {report['files']} docs → {report['chunks']} chunks.")
@@ -92,7 +92,7 @@ def sidebar():
                 df = pd.DataFrame(
                     [{"date": k, **v} for k, v in daily.items()]
                 ).set_index("date")
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width="stretch")
 
         # Tool activity
         st.divider()
@@ -188,7 +188,7 @@ def main():
     with st.expander("💡 Example questions", expanded=not st.session_state.messages):
         cols = st.columns(2)
         for i, ex in enumerate(EXAMPLES):
-            if cols[i % 2].button(ex, key=f"ex_{i}", use_container_width=True):
+            if cols[i % 2].button(ex, key=f"ex_{i}", width="stretch"):
                 st.session_state.pending = ex
                 st.rerun()
 

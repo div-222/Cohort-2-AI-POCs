@@ -2,8 +2,8 @@
 # Web UI
 streamlit>=1.36
 
-# LLM (Google Gemini via GCP API key)
-google-generativeai>=0.8.0
+# LLM (Google Gemini via GCP API key) — current SDK
+google-genai>=1.0.0
 
 # Local embeddings + reranking (fully offline)
 sentence-transformers>=3.0.0

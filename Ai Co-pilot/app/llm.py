@@ -11,7 +11,7 @@ from typing import Optional
 
 from . import config
 
-_configured = False
+_client = None
 
 
 class LLMError(RuntimeError):
@@ -37,16 +37,17 @@ def friendly_error(exc: Exception) -> str:
 
 def _ensure_configured():
     global _configured
-    if _configured:
-        return
+    global _client
+    if _client is not None:
+        return _client
     if not config.llm_available():
         raise RuntimeError(
             "GOOGLE_API_KEY is not set. Copy .env.example to .env and add your key."
         )
-    import google.generativeai as genai
+    from google import genai
 
-    genai.configure(api_key=config.GOOGLE_API_KEY)
-    _configured = True
+    _client = genai.Client(api_key=config.GOOGLE_API_KEY)
+    return _client
 
 
 @dataclass
@@ -65,21 +66,22 @@ def generate(
     model: Optional[str] = None,
 ) -> LLMResult:
     """Call Gemini and return text + token usage."""
-    _ensure_configured()
-    import google.generativeai as genai
+    client = _ensure_configured()
+    from google.genai import types
 
     model_name = model or config.GEMINI_MODEL
-    gen_cfg = {"temperature": temperature}
+    cfg_kwargs = {"temperature": temperature}
+    if system:
+        cfg_kwargs["system_instruction"] = system
     if json_mode:
-        gen_cfg["response_mime_type"] = "application/json"
+        cfg_kwargs["response_mime_type"] = "application/json"
 
-    gm = genai.GenerativeModel(
-        model_name,
-        system_instruction=system,
-        generation_config=gen_cfg,
-    )
     try:
-        resp = gm.generate_content(prompt)
+        resp = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(**cfg_kwargs),
+        )
     except Exception as exc:  # bad key, quota, network, etc.
         raise LLMError(friendly_error(exc)) from exc
 
