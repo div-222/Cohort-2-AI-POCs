@@ -1,10 +1,26 @@
 # Second Brain — Your Personal Knowledge Agent
 
+> **Version 2.0** — Migrated to `google-genai` SDK, enhanced multi-format ingestion, Streamlit layout updates, and watcher noise suppression.
+
 A powerful personal knowledge management system using **Agentic RAG**, **Semantic Memory**, and **Context Optimization** to help you remember, recall, and reason over everything you've learned, read, or saved.
 
 > **Demo Hook**: Upload your notes, PDFs, articles, and bookmarks. Ask questions like *"What did I read about LLM scaling last month?"* or *"Summarize everything I know about AI agents"*. Watch it reason through your personal knowledge base with complete transparency, showing exactly which sources it used and how it optimized the context.
 
-**Built with:** Google Gemini (LLM), Sentence-Transformers (local embeddings), ChromaDB (vector store), Streamlit (UI)
+**Built with:** Google Gemini via `google-genai` SDK (LLM), Sentence-Transformers (local embeddings), ChromaDB (vector store), Streamlit (UI)
+
+---
+
+## What's New in v2.0
+
+| Change | Detail |
+|--------|--------|
+| **`google-genai` SDK** | Migrated from deprecated `google-generativeai` to the current `google-genai>=1.0.0` SDK. Import path is now `from google import genai`. |
+| **Updated model names** | Default model updated to `gemini-2.0-flash`. The old `gemini-1.5-flash-8b` alias is no longer recommended. |
+| **Streamlit layout API** | Updated to `use_container_width=True` and current Streamlit sidebar/layout APIs — no more deprecation warnings. |
+| **`.streamlit/config.toml`** | Added to silence `sentence-transformers`/`torchvision` watcher noise and disable auto-browser-open on launch. |
+| **Expanded requirements** | Added `pypdf`, `python-pptx`, `markdown`, `pandas`, `python-dateutil` for broader document and date handling support. |
+| **Enhanced agents** | Planner, Retriever, and Reasoning agents significantly expanded with better intent detection, temporal parsing, and summarization. |
+| **Documentation** | Added `DEMO_GUIDE.md`, `QUICK_START.md`, and `IMPLEMENTATION_SUMMARY.md`. |
 
 ---
 
@@ -118,6 +134,8 @@ Copy-Item .env.example .env
 # Edit .env and set GOOGLE_API_KEY=your_key_here
 ```
 
+> **Note:** This project uses the **`google-genai`** package (v1.0+), not the older `google-generativeai` package. The `requirements.txt` already pins the correct package — just `pip install -r requirements.txt` is enough.
+
 ### First Run
 
 ```powershell
@@ -219,12 +237,14 @@ The system remembers your past Q&A interactions:
 
 ```bash
 GOOGLE_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-1.5-flash-8b  # or gemini-1.5-flash, gemini-1.5-pro
+GEMINI_MODEL=gemini-2.0-flash        # recommended; or gemini-2.0-flash-lite, gemini-1.5-flash
 CHUNK_SIZE=800
 CHUNK_OVERLAP=200
 RETRIEVE_TOP_K=10
 RERANK_TOP_N=5
 ```
+
+> **Model names with `google-genai` SDK**: Use `gemini-2.0-flash`, `gemini-2.0-flash-lite`, or `gemini-1.5-flash`. The old `gemini-1.5-flash-8b` alias is deprecated.
 
 ---
 
@@ -247,6 +267,11 @@ The Context Optimizer typically reduces LLM input tokens by **40-70%**, signific
 - **Temporal query parsing** with date-range filtering
 - **Cross-encoder reranking** for precision (MS-MARCO)
 - **Semantic memory** with similarity-based recall
+
+### LLM Integration
+- **SDK**: `google-genai` v1.0+ (`from google import genai`) — the current Google AI Python SDK
+- **Auth**: `genai.Client(api_key=...)` — no environment-level configure calls needed
+- **JSON mode**: Planner uses `response_mime_type="application/json"` for structured output
 
 ### Embeddings (100% Local)
 - **Model**: `sentence-transformers/all-MiniLM-L6-v2` (384-dim)
@@ -294,6 +319,18 @@ The Context Optimizer typically reduces LLM input tokens by **40-70%**, signific
 **Slow first query**
 - First run downloads embedding models (~80MB) — subsequent queries are fast
 
+**Console flooded with `ModuleNotFoundError: torchvision` tracebacks**
+- This is Streamlit's file watcher scanning `sentence-transformers` dependencies — harmless but noisy
+- Fixed by `.streamlit/config.toml` (`fileWatcherType = "none"`) which ships with this repo
+- If you deleted it, recreate it or run: `streamlit run streamlit_app.py --server.fileWatcherType none`
+
+**`ImportError: cannot import name 'configure' from 'google.generativeai'`**
+- You have the old `google-generativeai` package installed; uninstall it and install the new one:
+  ```powershell
+  pip uninstall google-generativeai -y
+  pip install google-genai>=1.0.0
+  ```
+
 ---
 
 ## 📄 License & Credits
@@ -301,8 +338,8 @@ The Context Optimizer typically reduces LLM input tokens by **40-70%**, signific
 Built as a proof-of-concept for agentic RAG systems.
 
 **Technologies:**
-- [Google Gemini](https://ai.google.dev) — LLM
-- [Sentence-Transformers](https://www.sbert.net/) — Local embeddings
+- [Google Gemini](https://ai.google.dev) via [`google-genai`](https://pypi.org/project/google-genai/) SDK — LLM
+- [Sentence-Transformers](https://www.sbert.net/) — Local embeddings & cross-encoder reranking
 - [ChromaDB](https://www.trychroma.com/) — Vector database
 - [Streamlit](https://streamlit.io/) — Web UI
 
