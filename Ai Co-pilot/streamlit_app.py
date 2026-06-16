@@ -1,4 +1,4 @@
-"""AI Co-Pilot for HR / IT Helpdesk — Streamlit web interface.
+"""Second Brain — Personal Knowledge Agent with Agentic RAG.
 
 Run with:  streamlit run streamlit_app.py
 """
@@ -10,12 +10,12 @@ import streamlit as st
 from app import config, vectorstore
 from app.agents import memory, tools
 from app.agents.cost_monitor import CostMonitor
-from app.ingest import build_index
+from app.ingest import build_index, ingest_uploaded_file
 from app.orchestrator import CoPilot
 
 st.set_page_config(
-    page_title="AI Co-Pilot · HR / IT Helpdesk",
-    page_icon="🤖",
+    page_title="Second Brain · Personal Knowledge Agent",
+    page_icon="🧠",
     layout="wide",
 )
 
@@ -24,23 +24,26 @@ if "copilot" not in st.session_state:
     st.session_state.copilot = CoPilot()
 if "messages" not in st.session_state:
     st.session_state.messages = []  # list of dicts: role, content, meta
+if "conversation_memory" not in st.session_state:
+    st.session_state.conversation_memory = []  # short-term conversation context
 
 copilot: CoPilot = st.session_state.copilot
 
 EXAMPLES = [
-    "How many earned leaves do I get and can I carry them forward?",
-    "What is the maternity leave policy?",
-    "How do I reset my VPN password?",
-    "How do I request a new laptop?",
-    "My Outlook isn't connecting — how do I configure it?",
-    "Raise a ticket: my laptop won't power on.",
+    "What did I read about LLM scaling last month?",
+    "Summarize everything I know about AI agents",
+    "What are my key notes on RAG systems?",
+    "Find information about vector databases in my documents",
+    "What did I save about prompt engineering?",
+    "Show me my research on semantic memory",
 ]
 
 
 # --- Sidebar --------------------------------------------------------------
 def sidebar():
     with st.sidebar:
-        st.title("🤖 AI Co-Pilot")
+        st.title("� Second Brain")
+        st.caption("Your Personal Knowledge Agent")
         st.caption("Agentic RAG · Semantic Memory · Context Optimizer")
 
         # LLM status
@@ -50,16 +53,63 @@ def sidebar():
             st.error("No GOOGLE_API_KEY — running in extractive (no-LLM) mode.")
             st.caption("Add your key to `.env` and restart for full answers.")
 
+        # File Upload Section
+        st.divider()
+        st.subheader("📤 Upload Documents")
+        st.caption("Upload PDFs, Word docs, text files, notes, bookmarks")
+        
+        uploaded_files = st.file_uploader(
+            "Drag and drop files here",
+            accept_multiple_files=True,
+            type=["pdf", "docx", "txt", "md", "html", "htm"],
+            label_visibility="collapsed"
+        )
+        
+        if uploaded_files:
+            upload_domain = st.selectbox(
+                "Categorize as:", 
+                ["Personal", "Research", "Work", "General", "Email", "Notes"],
+                key="upload_domain"
+            )
+            
+            if st.button("🚀 Process Uploads", type="primary", width="stretch"):
+                progress_bar = st.progress(0)
+                total_chunks = 0
+                
+                for idx, uploaded_file in enumerate(uploaded_files):
+                    with st.spinner(f"Processing {uploaded_file.name}..."):
+                        file_content = uploaded_file.read()
+                        file_type = uploaded_file.name.split('.')[-1].lower()
+                        
+                        result = ingest_uploaded_file(
+                            file_content=file_content,
+                            filename=uploaded_file.name,
+                            file_type=file_type,
+                            domain=upload_domain
+                        )
+                        
+                        if "error" not in result:
+                            total_chunks += result["chunks"]
+                            st.success(f"✓ {uploaded_file.name}: {result['chunks']} chunks")
+                        else:
+                            st.error(f"✗ {uploaded_file.name}: {result['error']}")
+                    
+                    progress_bar.progress((idx + 1) / len(uploaded_files))
+                
+                st.success(f"🎉 Processed {len(uploaded_files)} files → {total_chunks} chunks added to your brain!")
+                st.rerun()
+
         # Knowledge base status
         st.divider()
         st.subheader("📚 Knowledge Base")
         n = vectorstore.document_count()
         if n == 0:
-            st.warning("Index is empty. Build it to enable retrieval.")
+            st.warning("Knowledge base is empty. Upload files or rebuild index.")
         else:
-            st.metric("Indexed chunks", n)
-        if st.button("🔁 (Re)build index", width="stretch"):
-            with st.spinner("Chunking + embedding the policy corpus…"):
+            st.metric("Total chunks in your brain", f"{n:,}")
+        
+        if st.button("🔁 Rebuild from data/ folder", width="stretch"):
+            with st.spinner("Indexing all documents in data/ folder…"):
                 report = build_index(verbose=False)
             st.success(f"Indexed {report['files']} docs → {report['chunks']} chunks.")
             st.rerun()
@@ -69,13 +119,16 @@ def sidebar():
         st.subheader("⚙️ Agent Settings")
         copilot.settings["use_memory"] = st.toggle("Semantic Memory", value=True)
         copilot.settings["use_optimizer"] = st.toggle("Context Optimizer", value=True)
-        copilot.settings["allow_tools"] = st.toggle("Tool Calling (simulated)", value=True)
-        copilot.settings["top_k"] = st.slider("Retriever top-K", 3, 15, config.RETRIEVE_TOP_K)
+        copilot.settings["allow_tools"] = st.toggle("Tool Calling", value=False)
+        copilot.settings["top_k"] = st.slider("Retriever top-K", 3, 20, config.RETRIEVE_TOP_K)
 
         # Memory
         st.divider()
         st.subheader("🧠 Semantic Memory")
-        st.metric("Stored interactions", memory.count())
+        mem_count = memory.count()
+        st.metric("Stored interactions", mem_count)
+        if mem_count > 0:
+            st.caption(f"Your Second Brain remembers {mem_count} past conversations")
 
         # Cost dashboard
         st.divider()
@@ -93,16 +146,6 @@ def sidebar():
                     [{"date": k, **v} for k, v in daily.items()]
                 ).set_index("date")
                 st.dataframe(df, width="stretch")
-
-        # Tool activity
-        st.divider()
-        st.subheader("🛠️ Tool Activity")
-        acts = tools.recent_activity(limit=8)
-        if not acts:
-            st.caption("No tool calls yet.")
-        for a in acts:
-            label = a.get("ticket_number") or a.get("channel") or a.get("to") or ""
-            st.caption(f"`{a['tool']}` · {a['status']} · {label}")
 
 
 # --- Render one assistant message detail ----------------------------------
@@ -175,14 +218,14 @@ def render_details(meta: dict, idx: int):
 def main():
     sidebar()
 
-    st.title("Internal HR / IT Helpdesk Co-Pilot")
+    st.title("🧠 Second Brain — Your Personal Knowledge Agent")
     st.caption(
-        "Ask about leave, reimbursement, travel, insurance, benefits, onboarding · "
-        "password reset, VPN, laptops, software, email, security."
+        "Upload your notes, PDFs, bookmarks, and documents. Ask questions and get "
+        "intelligent answers from your personal knowledge base with complete transparency."
     )
 
     if vectorstore.document_count() == 0:
-        st.info("👈 Build the knowledge-base index from the sidebar to get started.")
+        st.info("👈 Upload some documents or rebuild the index from the sidebar to get started.")
 
     # Example chips
     with st.expander("💡 Example questions", expanded=not st.session_state.messages):
@@ -200,11 +243,18 @@ def main():
                 render_details(msg["meta"], idx)
 
     # Input
-    prompt = st.chat_input("Ask a HR or IT question…")
+    prompt = st.chat_input("Ask about anything in your knowledge base…")
     if "pending" in st.session_state:
         prompt = st.session_state.pop("pending")
 
     if prompt:
+        # Store in short-term conversation memory
+        st.session_state.conversation_memory.append({
+            "role": "user",
+            "content": prompt,
+            "timestamp": pd.Timestamp.now()
+        })
+        
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -217,6 +267,13 @@ def main():
             st.markdown(resp.answer)
             meta = {"resp": _resp_to_dict(resp)}
             render_details(meta, len(st.session_state.messages))
+        
+        # Store assistant response in short-term memory
+        st.session_state.conversation_memory.append({
+            "role": "assistant",
+            "content": resp.answer,
+            "timestamp": pd.Timestamp.now()
+        })
 
         st.session_state.messages.append(
             {"role": "assistant", "content": resp.answer, "meta": meta}

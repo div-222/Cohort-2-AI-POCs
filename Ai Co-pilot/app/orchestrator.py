@@ -76,8 +76,15 @@ class CoPilot:
         p, plan_usage = planner.plan(query, use_llm=use_llm)
         if plan_usage:
             self.cost.record(plan_usage, label="planner")
-        trace.append(f"🧭 Planner: intent={p.intent}, domain={p.domain_filter}, "
-                     f"tool={'yes' if p.tool else 'no'} — {p.rationale}")
+        
+        # Build trace message
+        trace_msg = f"🧭 Planner: intent={p.intent}, domain={p.domain_filter or 'any'}"
+        if p.temporal_filter:
+            trace_msg += f", temporal={p.temporal_filter.get('type', 'custom')}"
+        if p.summarize_topic:
+            trace_msg += f", summarize topic='{p.topic}'"
+        trace_msg += f" — {p.rationale}"
+        trace.append(trace_msg)
 
         resp = CoPilotResponse(answer="", plan=p, trace=trace)
 
@@ -107,9 +114,17 @@ class CoPilot:
         retrieved: List[dict] = []
         if p.search_documents:
             top_k = self._opt("top_k", config.RETRIEVE_TOP_K)
-            retrieved = retriever.retrieve(query, domain_filter=p.domain_filter, top_k=top_k)
+            retrieved = retriever.retrieve(
+                query, 
+                domain_filter=p.domain_filter, 
+                temporal_filter=p.temporal_filter,
+                top_k=top_k
+            )
+            temporal_info = ""
+            if p.temporal_filter:
+                temporal_info = f", temporal filter: {p.temporal_filter.get('type', 'custom')}"
             trace.append(f"📚 Retriever: {len(retrieved)} candidate chunk(s) "
-                         f"(domain filter: {p.domain_filter or 'none'}).")
+                         f"(domain: {p.domain_filter or 'any'}{temporal_info}).")
         resp.retrieved = retrieved
 
         # 4) CONTEXT OPTIMIZER -------------------------------------------
@@ -130,11 +145,17 @@ class CoPilot:
         # 5) REASONING ----------------------------------------------------
         if use_llm:
             try:
-                ans, ans_usage = reasoning.answer(query, resp.optimized, memory_hit)
+                # Use summarization mode if requested
+                if p.summarize_topic and p.topic:
+                    ans, ans_usage = reasoning.summarize_topic(p.topic, resp.optimized)
+                    trace.append(f"💬 Reasoning: topic summary generated for '{p.topic}'.")
+                else:
+                    ans, ans_usage = reasoning.answer(query, resp.optimized, memory_hit)
+                    trace.append("💬 Reasoning: grounded answer generated.")
+                
                 if ans_usage.model != "(no-llm)":
                     self.cost.record(ans_usage, label="reasoning")
                 resp.answer = ans
-                trace.append("💬 Reasoning: grounded answer generated.")
             except LLMError as e:
                 resp.llm_error = str(e)
                 resp.answer = self._extractive(resp.optimized, note=str(e))
@@ -154,29 +175,22 @@ class CoPilot:
                 seen.add(t)
                 resp.sources.append(t)
 
-        # 6) TOOL AGENT ---------------------------------------------------
-        if self._opt("allow_tools", True) and p.tool and p.intent == "TOOL":
-            tool_result = tools.execute(p.tool, query, domain=p.domain_filter or "IT")
+        # 6) TOOL AGENT (optional, disabled by default for Second Brain) ---
+        if self._opt("allow_tools", False) and p.tool:
+            tool_result = tools.execute(p.tool, query, domain=p.domain_filter or "General")
             resp.tool_result = tool_result
             trace.append(f"🛠️ Tool Agent: {tool_result.get('tool')} → "
                          f"{tool_result.get('status')} "
                          f"{tool_result.get('ticket_number', '')}".strip())
-            if tool_result.get("ticket_number"):
-                resp.answer += (
-                    f"\n\n✅ I've raised a ticket for you: "
-                    f"**{tool_result['ticket_number']}** "
-                    f"(assigned to {tool_result['assignment_group']})."
-                )
 
         # 7) MEMORY store -------------------------------------------------
-        if (self._opt("use_memory", True) and resp.answer and p.intent != "GENERAL"
-                and not resp.llm_error):
+        if (self._opt("use_memory", True) and resp.answer and not resp.llm_error):
             # Don't re-store a near-identical confident hit or a failed answer.
             if not memory_hit:
                 resp.memory_id = memory.store(
-                    query, p.intent, resp.answer, resp.sources, score=0.7
+                    query, p.intent, resp.answer, resp.sources, score=0.8
                 )
-                trace.append("🧠 Semantic Memory: stored this interaction.")
+                trace.append("🧠 Semantic Memory: stored this interaction for future recall.")
 
         # 8) COST ---------------------------------------------------------
         resp.request_cost = self.cost.request_summary(cost_cursor)
