@@ -137,4 +137,23 @@ request, software install, email config, security).
 - `Redis` in the brief is approximated by ChromaDB for semantic memory (no extra
   service to run). Swap-in points are isolated in `app/agents/memory.py`.
 - Local state (`.chroma/`, `storage/`) is git-ignored.
+
+---
+
+## 📖 Deep Dive Documentation
+
+For a comprehensive technical explanation of all concepts, algorithms, and design patterns used in this POC, see:
+
+**[CONCEPTS.md →](./CONCEPTS.md)**
+
+This document covers:
+- Agentic RAG architecture and agent pipeline
+- Semantic Memory implementation and feedback loops
+- Context Optimizer's 3-stage pipeline (dedup → rerank → compress)
+- Tool calling patterns and safety features
+- Cost monitoring and token tracking
+- Vector database design with ChromaDB
+- Embedding and cross-encoder reranking details
+- Document ingestion and chunking strategies
+- Design patterns (Pipeline, Strategy, Singleton, etc.)
 ```
